@@ -1,84 +1,69 @@
 import json
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
+import logging
+from aiogram import Bot, Dispatcher, types, executor
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.dispatcher.filters import CommandStart, Command
+from aiogram.dispatcher import filters
 
+# Загрузка конфигурации
 with open("config.json", "r") as f:
     config = json.load(f)
 
-BOT_TOKEN = config["bot_token"]
-ALLOWED_USERS = config["allowed_users"]
-EVENTS_DATA = config["events"]  # эмуляция базы
+TELEGRAM_TOKEN = config["telegram_token"]
+ALLOWED_USERS = config.get("allowed_users", [])
 
+bot = Bot(token=TELEGRAM_TOKEN)
+dp = Dispatcher(bot)
+
+# Список карт и ивентов
 MAPS = [
-    "Crashlands", "Sunset Mall", "Cascade Swamps", "Ironclad Industries", "Tech Junkyard",
-    "Glitchwood Grove", "The Underbelly", "Forgotten Docks", "Scorched Summit",
-    "Moonlight Temple", "Sporewood", "Eclipsed Highlands", "Ashen Wastes"
+    "Downtown", "Farm", "Ranch", "Fairgrounds", "Harbor",
+    "Lab", "Bazaar", "Trainyard", "Boardwalk", "Park",
+    "Studio", "Suburb", "Complex"
 ]
 
-EVENT_TYPES = ["Overcharged", "Boss", "Rift", "Escort", "Dojo", "Wave"]
+EVENT_TYPES = ["Overcharged", "Boss", "Escort", "Dojo", "Rift"]
 
-user_filters = {}  # user_id: [selected_types]
+# Команда /start
+@dp.message_handler(CommandStart())
+async def start_handler(message: types.Message):
+    if message.from_user.id not in ALLOWED_USERS:
+        await message.answer("⛔️ У вас нет доступа к этому боту.")
+        return
+    await message.answer("Привет! Напиши /events, чтобы выбрать карту и посмотреть ближайшие ивенты.")
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id not in ALLOWED_USERS:
-        await update.message.reply_text("⛔ Доступ запрещён.")
+# Команда /events
+@dp.message_handler(Command("events"))
+async def events_handler(message: types.Message):
+    if message.from_user.id not in ALLOWED_USERS:
+        await message.answer("⛔️ У вас нет доступа к этому боту.")
         return
 
-    keyboard = [[InlineKeyboardButton(m, callback_data=f"map:{m}")] for m in MAPS]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("Выбери карту:", reply_markup=reply_markup)
+    keyboard = InlineKeyboardMarkup(row_width=2)
+    for name in MAPS:
+        keyboard.insert(InlineKeyboardButton(text=name, callback_data=f"map_{name}"))
 
-async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    data = query.data
+    await message.answer("Выбери карту:", reply_markup=keyboard)
 
-    if data.startswith("map:"):
-        map_name = data.split(":")[1]
-        keyboard = [
-            [InlineKeyboardButton(f"{'✅' if t in user_filters.get(query.from_user.id, EVENT_TYPES) else '☐'} {t}", callback_data=f"filter:{map_name}:{t}")]
-            for t in EVENT_TYPES
-        ]
-        keyboard.append([InlineKeyboardButton("✅ Показать события", callback_data=f"show:{map_name}")])
-        await query.edit_message_text(f"Выбранная карта: {map_name}")
-Выбери фильтры:", reply_markup=InlineKeyboardMarkup(keyboard))
+# Обработка выбора карты
+@dp.callback_query_handler(filters.Text(startswith="map_"))
+async def map_callback_handler(query: types.CallbackQuery):
+    map_name = query.data.replace("map_", "")
 
-    elif data.startswith("filter:"):
-        _, map_name, event_type = data.split(":")
-        uid = query.from_user.id
-        user_filters.setdefault(uid, list(EVENT_TYPES))
-        if event_type in user_filters[uid]:
-            user_filters[uid].remove(event_type)
-        else:
-            user_filters[uid].append(event_type)
-        keyboard = [
-            [InlineKeyboardButton(f"{'✅' if t in user_filters[uid] else '☐'} {t}", callback_data=f"filter:{map_name}:{t}")]
-            for t in EVENT_TYPES
-        ]
-        keyboard.append([InlineKeyboardButton("✅ Показать события", callback_data=f"show:{map_name}")])
-        await query.edit_message_reply_markup(InlineKeyboardMarkup(keyboard))
+    keyboard = InlineKeyboardMarkup(row_width=2)
+    for ev_type in EVENT_TYPES:
+        keyboard.insert(InlineKeyboardButton(text=ev_type, callback_data=f"filter_{map_name}_{ev_type}"))
 
-    elif data.startswith("show:"):
-        map_name = data.split(":")[1]
-        uid = query.from_user.id
-        filters = user_filters.get(uid, EVENT_TYPES)
-        matched = [e for e in EVENTS_DATA if e["map"] == map_name and e["type"] in filters]
-        if not matched:
-            await query.edit_message_text("Нет активных событий на этой карте по заданным фильтрам.")
-            return
-        msg = f"🎯 События на карте: {map_name}
+    await query.message.edit_text(f"Выбранная карта: {map_name}\nВыбери фильтры:", reply_markup=keyboard)
 
-"
-        for e in matched:
-            msg += f"• {e['type']} – {e['status']} ({e['reported']})
-"
-        await query.edit_message_text(msg)
+# Обработка выбора фильтра
+@dp.callback_query_handler(filters.Text(startswith="filter_"))
+async def filter_callback_handler(query: types.CallbackQuery):
+    _, map_name, ev_type = query.data.split("_", 2)
 
-def main():
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("events", start))
-    app.add_handler(CallbackQueryHandler(button))
-    app.run_polling()
+    # Здесь можно подключить реальный сбор данных о событиях
+    await query.message.edit_text(f"🔍 Ближайшие события на карте {map_name} типа {ev_type} будут здесь... (заглушка)")
 
-if __name__ == "__main__":
-    main()
+if __name__ == '__main__':
+    logging.basicConfig(level=logging.INFO)
+    executor.start_polling(dp, skip_updates=True)
