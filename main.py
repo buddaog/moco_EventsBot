@@ -9,7 +9,6 @@ from aiogram.filters import CommandStart, Command
 from aiogram.client.default import DefaultBotProperties
 from aiogram import Router
 
-# Загрузка токена и разрешенных пользователей
 with open("config.json", "r") as f:
     config = json.load(f)
 
@@ -24,7 +23,6 @@ MAPS = [
 
 EVENT_TYPES = ["Overcharged", "Boss", "Escort", "Dojo", "Rift"]
 
-# Настройка диспетчера и роутера
 dp = Dispatcher()
 router = Router()
 
@@ -58,4 +56,21 @@ async def map_selected(callback: types.CallbackQuery):
 
     await callback.message.edit_text(
         f"Выбранная карта: {map_name}\nВыбери фильтры:",
-        reply_marku_
+        reply_markup=keyboard.as_markup()
+    )
+
+@router.callback_query(F.data.startswith("filter_"))
+async def filter_selected(callback: types.CallbackQuery):
+    _, map_name, ev_type = callback.data.split("_", 2)
+    await callback.message.edit_text(
+        f"🔍 Ближайшие события на карте {map_name} типа {ev_type} будут здесь... (заглушка)"
+    )
+
+async def main():
+    bot = Bot(token=TELEGRAM_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+    dp.include_router(router)
+    await dp.start_polling(bot)
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    asyncio.run(main())
