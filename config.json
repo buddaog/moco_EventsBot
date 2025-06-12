@@ -1,4 +1,4 @@
 {
   "telegram_token": "7736390099:AAHIDSncyfAPCx85XWB-4mxSw6dZCWhZdX0",
-  "allowed_users": [885910768]
+  "allowed_users": [885910768]  // ← сюда вставь свой Telegram ID
 }
