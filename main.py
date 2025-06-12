@@ -40,7 +40,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             for t in EVENT_TYPES
         ]
         keyboard.append([InlineKeyboardButton("✅ Показать события", callback_data=f"show:{map_name}")])
-        await query.edit_message_text(f"Выбранная карта: {map_name}
+        await query.edit_message_text(f"Выбранная карта: {map_name}")
 Выбери фильтры:", reply_markup=InlineKeyboardMarkup(keyboard))
 
     elif data.startswith("filter:"):
